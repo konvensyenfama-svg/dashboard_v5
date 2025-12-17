@@ -137,21 +137,23 @@ export const fetchDashboardData = async (
   const { data: presentDataRaw, error: presentError } = await queryPresent;
   if (presentError) throw new Error(`Gagal membaca 'pendaftaran': ${presentError.message}`);
 
-  // --- CALCULATION LOGIC (AVERAGE vs EXACT) ---
+  // --- CALCULATION LOGIC (UNIVERSAL AVERAGE) ---
   
-  // Determine if we need to average the data
-  // We average if: Date is selected AND Session is NOT selected
-  // Exception: If the date only has 1 session anyway, average is same as exact.
-  const uniqueSessionsInResult = new Set((presentDataRaw || []).map((r: any) => r.sesi));
-  const numberOfSessions = uniqueSessionsInResult.size;
+  // Identify unique sessions in the current result set based on Date + Session combination
+  // This ensures accuracy even if we view "All Dates"
+  const uniqueSessionKeys = new Set((presentDataRaw || []).map((r: any) => `${r.tarikh_kehadiran}_${r.sesi}`));
+  const numberOfSessions = uniqueSessionKeys.size;
   
-  // Divisor is 1 if a specific session is selected, otherwise it's the number of unique sessions found
-  const divisor = (tarikh && !sesi && numberOfSessions > 0) ? numberOfSessions : 1;
+  // Divisor Logic:
+  // If numberOfSessions > 1, we divide by it to get the Average per session.
+  // If numberOfSessions is 1 (e.g. specific session selected), we divide by 1 (Exact count).
+  // If numberOfSessions is 0, we avoid division by zero.
+  const divisor = numberOfSessions > 0 ? numberOfSessions : 1;
 
   // 3. Process Data for Stats
   const totalParticipants = totalDataRaw?.length || 0;
   
-  // Use Average for the "Present" count if applicable
+  // Calculate Average Present Count
   const rawPresentCount = presentDataRaw?.length || 0;
   const presentParticipants = Math.round(rawPresentCount / divisor);
   
@@ -192,8 +194,6 @@ export const fetchDashboardData = async (
   chartData.sort((a, b) => a.name.localeCompare(b.name));
 
   // 5. Generate Lists (Present vs Absent)
-  // For the LIST, we usually want to see everyone who checked in regardless of session duplicates if looking at a whole day,
-  // BUT for "Absent" calculation, if they attended ANY session, they are present.
   
   // Create a Set of present IDs (unique people who attended at least one session in the filter scope)
   const presentIds = new Set(presentDataRaw?.map((p: any) => p.no_pekerja));
@@ -228,7 +228,7 @@ export const fetchDashboardData = async (
   return {
     stats: {
       totalParticipants,
-      presentParticipants, // This is now the AVERAGE if multiple sessions exist
+      presentParticipants, // This is now the AVERAGE attendance per session
       attendancePercentage
     },
     chartData,
