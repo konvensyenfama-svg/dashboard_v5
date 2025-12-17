@@ -1,0 +1,5 @@
+{
+  "name": "Dashboard Kehadiran Peserta - baru",
+  "description": "Dashboard analitik kehadiran menggunakan Supabase dengan visualisasi data masa nyata.",
+  "requestFramePermissions": []
+}
