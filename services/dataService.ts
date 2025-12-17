@@ -137,31 +137,45 @@ export const fetchDashboardData = async (
   const { data: presentDataRaw, error: presentError } = await queryPresent;
   if (presentError) throw new Error(`Gagal membaca 'pendaftaran': ${presentError.message}`);
 
-  // --- CALCULATION LOGIC (UNIVERSAL AVERAGE) ---
+  // --- CALCULATION LOGIC ---
   
-  // Identify unique sessions in the current result set based on Date + Session combination
-  // This ensures accuracy even if we view "All Dates"
-  const uniqueSessionKeys = new Set((presentDataRaw || []).map((r: any) => `${r.tarikh_kehadiran}_${r.sesi}`));
-  const numberOfSessions = uniqueSessionKeys.size;
+  // Group raw data by session to get accurate counts per session
+  const sessionCounts: Record<string, number> = {};
+  (presentDataRaw || []).forEach((row: any) => {
+    // Key by date + session to handle multi-day views correctly
+    const key = `${row.tarikh_kehadiran}__${row.sesi}`;
+    sessionCounts[key] = (sessionCounts[key] || 0) + 1;
+  });
+
+  const countsArray = Object.values(sessionCounts);
   
-  // Divisor Logic:
-  // If numberOfSessions > 1, we divide by it to get the Average per session.
-  // If numberOfSessions is 1 (e.g. specific session selected), we divide by 1 (Exact count).
-  // If numberOfSessions is 0, we avoid division by zero.
-  const divisor = numberOfSessions > 0 ? numberOfSessions : 1;
+  // MAX Calculation (for Kehadiran Semasa - Peak Attendance)
+  const maxSessionAttendance = countsArray.length > 0 ? Math.max(...countsArray) : 0;
+  
+  // AVERAGE Calculation (for Purata Kehadiran - Average Performance)
+  const sumAttendance = countsArray.reduce((a, b) => a + b, 0);
+  const avgSessionAttendance = countsArray.length > 0 ? Math.round(sumAttendance / countsArray.length) : 0;
+  
+  // Divisor for chart normalization (using Average for chart consistency)
+  const numberOfSessions = countsArray.length;
+  const chartDivisor = numberOfSessions > 0 ? numberOfSessions : 1;
 
   // 3. Process Data for Stats
   const totalParticipants = totalDataRaw?.length || 0;
   
-  // Calculate Average Present Count
-  const rawPresentCount = presentDataRaw?.length || 0;
-  const presentParticipants = Math.round(rawPresentCount / divisor);
+  // USER REQUEST: Use the HIGHEST value for the default "Current Attendance" display
+  const presentParticipants = maxSessionAttendance;
   
+  // USER REQUEST: Keep "Purata" logic for the Percentage card
   const attendancePercentage = totalParticipants > 0 
-    ? (presentParticipants / totalParticipants) * 100 
+    ? (avgSessionAttendance / totalParticipants) * 100 
     : 0;
 
   // 4. Process Data for Chart (Grouping by Wing/Negeri)
+  // For the Chart, we stick to Average to show general performance, or Max?
+  // User asked for "purata" in previous prompt for general view. 
+  // Let's use Average for Chart to avoid one giant bar skewing the visual if one session was huge.
+  
   const totalMap = new Map<string, number>();
   totalDataRaw?.forEach((row: any) => {
     const w = row.wing_negeri || 'Lain-lain';
@@ -180,8 +194,8 @@ export const fetchDashboardData = async (
     const total = totalMap.get(wing) || 0;
     const rawHadir = presentMap.get(wing) || 0;
     
-    // Apply average logic to chart data as well
-    const hadir = Math.round(rawHadir / divisor);
+    // Using Average for the chart bars
+    const hadir = Math.round(rawHadir / chartDivisor);
 
     return {
       name: wing,
@@ -199,7 +213,6 @@ export const fetchDashboardData = async (
   const presentIds = new Set(presentDataRaw?.map((p: any) => p.no_pekerja));
 
   // Present List: Unique list of people who attended
-  // We deduplicate by no_pekerja for the display list so it matches the "Headcount" logic better
   const uniquePresentMap = new Map<string, Student>();
   (presentDataRaw || []).forEach((row: any) => {
     if (!uniquePresentMap.has(row.no_pekerja)) {
@@ -228,8 +241,8 @@ export const fetchDashboardData = async (
   return {
     stats: {
       totalParticipants,
-      presentParticipants, // This is now the AVERAGE attendance per session
-      attendancePercentage
+      presentParticipants, // Returns MAX attendance
+      attendancePercentage // Returns AVERAGE percentage
     },
     chartData,
     lists: {
