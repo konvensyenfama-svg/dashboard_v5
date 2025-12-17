@@ -48,10 +48,10 @@ const App: React.FC = () => {
       setFilterOptions(options);
       
       // Initial Logic:
-      // If dates exist, select the first one automatically
+      // Default to the LATEST date (last item since they are sorted chronologically)
       if (options.dates.length > 0 && !filters.tarikh) {
-        const firstDate = options.dates[0];
-        setFilters(prev => ({ ...prev, tarikh: firstDate }));
+        const latestDate = options.dates[options.dates.length - 1];
+        setFilters(prev => ({ ...prev, tarikh: latestDate }));
         // Sessions will be updated by the useEffect below
       }
     } catch (err: any) {
@@ -135,7 +135,7 @@ const App: React.FC = () => {
               <LayoutDashboard className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">DASHBOARD KEHADIRAN PESERTA KF26</h1>
+              <h1 className="text-xl font-bold text-gray-900">Dashboard Kehadiran</h1>
               <p className="text-xs text-gray-500">Live Data</p>
             </div>
           </div>
